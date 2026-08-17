@@ -1,0 +1,132 @@
+name: Build Windows installer
+
+# The installer can only be built on Windows, so this workflow is the way to
+# get one without a Windows machine to hand. Push a tag, or run it by hand from
+# the Actions tab, and the finished .exe comes out as an artifact.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Tests
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Install Tesseract
+        run: choco install -y tesseract --params "/InstallDir:C:\Tesseract-OCR"
+
+      - name: Add the German and Hindi language data
+        shell: pwsh
+        run: |
+          $tessdata = "C:\Tesseract-OCR\tessdata"
+          foreach ($code in @("deu", "hin", "osd")) {
+            $url = "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/main/$code.traineddata"
+            Invoke-WebRequest -Uri $url -OutFile "$tessdata\$code.traineddata"
+          }
+
+      - name: Run the tests
+        env:
+          LPT_TESSERACT_EXE: C:\Tesseract-OCR\tesseract.exe
+        run: python -m pytest tests -q
+
+      - name: Check formatting and lint
+        run: |
+          ruff check local_pdf_translator scripts tests
+          ruff format --check local_pdf_translator scripts tests
+
+  build:
+    name: Installer
+    runs-on: windows-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      # The converted models are ~300 MB and take about ten minutes to build,
+      # so they are cached on the model list rather than rebuilt every run.
+      - name: Restore the converted models
+        id: models
+        uses: actions/cache@v4
+        with:
+          path: models
+          key: models-${{ hashFiles('local_pdf_translator/core/model_catalog.py') }}
+
+      - name: Convert the translation models
+        if: steps.models.outputs.cache-hit != 'true'
+        run: python scripts/fetch_models.py
+
+      - name: Install Tesseract
+        run: choco install -y tesseract --params "/InstallDir:C:\Tesseract-OCR"
+
+      - name: Add the German and Hindi language data
+        shell: pwsh
+        run: |
+          $tessdata = "C:\Tesseract-OCR\tessdata"
+          foreach ($code in @("deu", "hin", "osd")) {
+            $url = "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/main/$code.traineddata"
+            Invoke-WebRequest -Uri $url -OutFile "$tessdata\$code.traineddata"
+          }
+
+      - name: Bundle Tesseract into the build
+        run: python scripts/bundle_tesseract.py --source C:\Tesseract-OCR
+
+      # The AGPL text must ship verbatim with the build, and the installer
+      # shows it on its licence page.
+      - name: Vendor the full licence text
+        run: python scripts/fetch_license.py
+
+      - name: Build the application
+        run: python scripts/build_exe.py --clean
+
+      - name: Smoke-test the built application
+        shell: pwsh
+        run: |
+          # It must at least start, load its models and shut down cleanly.
+          $env:QT_QPA_PLATFORM = "offscreen"
+          & "dist\LocalPDFTranslator\LocalPDFTranslator.exe" --self-test
+          if ($LASTEXITCODE -ne 0) { throw "the built application failed its self-test" }
+
+      - name: Build the installer
+        run: python scripts/build_installer.py
+
+      - name: Upload the installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: LocalPDFTranslator-Setup
+          path: dist/installer/*.exe
+          if-no-files-found: error
+
+      - name: Attach the installer to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/installer/*.exe
