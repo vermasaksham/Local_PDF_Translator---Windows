@@ -6,10 +6,11 @@ name: Build Windows installer
 
 on:
   push:
-    branches: [main]
+    # Feature branches included deliberately: this is how the installer gets
+    # built at all, so it has to run before anything reaches main.
+    branches: [main, "claude/**"]
     tags: ["v*"]
   pull_request:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -58,6 +59,11 @@ jobs:
     name: Installer
     runs-on: windows-latest
     needs: test
+    # Read is enough to build; the tagged-release step below needs to write
+    # the installer back to the release, so this job is granted more than the
+    # workflow default above.
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
