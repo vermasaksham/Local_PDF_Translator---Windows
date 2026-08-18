@@ -92,7 +92,7 @@ def run() -> int:
     # -- text rendering
     print("\nText rendering")
     from .pdf import fonts
-    from .pdf.textpainter import shaping_available
+    from .pdf.textpainter import shaping_status
 
     for language in languages.ALL:
         try:
@@ -101,11 +101,8 @@ def run() -> int:
         except Exception as failure:
             results.check(f"font for {language.english_name}", False, str(failure))
     # Not a warning: without shaping, Hindi output is wrong rather than ugly.
-    results.check(
-        "Devanagari shaping (Qt)",
-        shaping_available(),
-        "" if shaping_available() else "Hindi would render incorrectly",
-    )
+    shapes, reason = shaping_status()
+    results.check("Devanagari shaping (Qt)", shapes, reason)
 
     # -- OCR is optional; the app is still useful without it
     print("\nText recognition (optional)")

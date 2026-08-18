@@ -19,7 +19,7 @@ from .. import APP_NAME, __version__
 from ..core import languages
 from ..core.model_catalog import ModelDescriptor
 from ..pdf import ocr
-from ..pdf.textpainter import shaping_available
+from ..pdf.textpainter import shaping_status
 from .language_bar import LanguageBar
 from .pdf_tab import PdfTab
 from .state import AppState
@@ -113,15 +113,15 @@ class MainWindow(QMainWindow):
                 )
             )
 
-        if not shaping_available():
+        shapes, shaping_reason = shaping_status()
+        if not shapes:
             # Without shaping, Devanagari would be drawn with its vowel signs
             # in the wrong places — wrong text, not merely ugly text.
             banners.append(
                 _banner(
                     "Hindi output will not be shaped correctly",
-                    "Qt is not shaping complex scripts on this machine, so Devanagari "
-                    "conjuncts and vowel signs cannot be positioned properly. Check that "
-                    "a Devanagari font (Nirmala UI) is installed.",
+                    "Devanagari conjuncts and vowel signs cannot be positioned "
+                    f"properly here: {shaping_reason}.",
                 )
             )
 

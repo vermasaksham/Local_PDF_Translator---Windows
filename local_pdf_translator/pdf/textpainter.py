@@ -290,27 +290,47 @@ class ShapingUnavailable(RuntimeError):
 
 
 @lru_cache(maxsize=1)
-def shaping_available() -> bool:
-    """Whether complex-script text really is being shaped.
+def shaping_status() -> tuple[bool, str]:
+    """Whether complex-script text really is being shaped, and why not if not.
 
     A functional check rather than a version check: it lays out a Devanagari
     string that must form a conjunct and compares the result with the width of
     the same code points measured one at a time. If a shaper ran, the two
     disagree. If they match, the glyphs are being emitted in logical order and
     Hindi output would be wrong.
+
+    The reason is returned rather than swallowed because the two ways this
+    fails — no Devanagari font, or a font that loads but is not shaped — need
+    completely different fixes, and a bare False says nothing about which.
     """
     from PySide6.QtGui import QFontMetricsF
 
     try:
         choice = font_for_devanagari()
+    except Exception as failure:
+        return False, f"no Devanagari font could be found ({failure})"
+
+    try:
         _qt_application()
         font = _qt_font(str(choice.regular), int(_REFERENCE_SIZE), False)
         metrics = QFontMetricsF(font)
         shaped = metrics.horizontalAdvance(_SHAPING_PROBE)
         naive = sum(metrics.horizontalAdvance(character) for character in _SHAPING_PROBE)
-    except Exception:
-        return False
-    return shaped > 0 and abs(shaped - naive) > 0.5
+    except Exception as failure:
+        return False, f"Qt could not lay out Devanagari with {choice.regular.name} ({failure})"
+
+    if shaped <= 0:
+        return False, f"{choice.regular.name} produced no glyphs for Devanagari"
+    if abs(shaped - naive) <= 0.5:
+        return False, (
+            f"{choice.regular.name} loaded but nothing shaped the text "
+            "(vowel signs would sit on the wrong side of their consonants)"
+        )
+    return True, f"shaped with {choice.regular.name}"
+
+
+def shaping_available() -> bool:
+    return shaping_status()[0]
 
 
 def font_for_devanagari() -> FontChoice:

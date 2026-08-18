@@ -19,7 +19,7 @@ from local_pdf_translator.pdf.textpainter import (
     VectorTextPainter,
     painter_for,
     rgb_from_int,
-    shaping_available,
+    shaping_status,
 )
 
 HINDI_TEXT = "तिमाही रिपोर्ट में वृद्धि दर्ज की गई है।"
@@ -79,7 +79,8 @@ def test_shaping_is_available():
     If this fails, the app still runs — it shows a banner saying so — but the
     Hindi output is not trustworthy.
     """
-    assert shaping_available(), "Devanagari is not being shaped"
+    working, reason = shaping_status()
+    assert working, f"Devanagari is not being shaped: {reason}"
 
 
 # -- colour ----------------------------------------------------------------

@@ -70,15 +70,13 @@ def check_optional_payloads() -> None:
         )
 
     try:
-        from local_pdf_translator.pdf.textpainter import shaping_available
+        from local_pdf_translator.pdf.textpainter import shaping_status
 
-        if not shaping_available():
-            warn(
-                "complex-script shaping is not working here, so Hindi output would "
-                "not be trustworthy. Check that a Devanagari font is installed."
-            )
+        shapes, reason = shaping_status()
+        if shapes:
+            log(f"Devanagari shaping works — {reason}")
         else:
-            log("Devanagari shaping works")
+            warn(f"Hindi output would not be trustworthy: {reason}")
     except Exception as failure:
         warn(f"could not check complex-script shaping: {failure}")
 
