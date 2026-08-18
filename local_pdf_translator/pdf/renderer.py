@@ -47,6 +47,9 @@ class RenderOptions:
     #: How far a block may grow downwards into whitespace, as a multiple of its
     #: original height.
     maximum_growth: float = 2.2
+    #: Gap left between a block that has grown sideways and whatever it grew
+    #: towards, so the two never touch.
+    horizontal_clearance: float = 6.0
     #: Grown very slightly so a redaction covers the whole of the original
     #: glyphs including their antialiased edges.
     redaction_padding: float = 0.3
@@ -64,6 +67,9 @@ class BlockFit:
     size: float
     leading: float
     height: float
+    #: The width the text was actually wrapped to, which for a single-line
+    #: block may be wider than the block's own rectangle.
+    width: float
     #: True when even the floor size did not fit and the text will run on.
     overflowed: bool
 
@@ -149,14 +155,29 @@ class TranslatedPdfRenderer:
 
         result = PageRenderResult(blocks_drawn=len(pairs))
         for block, translation, colour, _ in prepared:
-            available = self.available_height(block, layout)
-            fit = self.fit(painter, translation, block, available)
+            fit = self.fit(
+                painter,
+                translation,
+                block,
+                self.available_height(block, layout),
+                self.available_width(block, layout),
+            )
             if fit.overflowed:
                 result.overflowed += 1
+            # The text is set into a rectangle as wide as it was wrapped to,
+            # which for a grown single-line block is wider than the block's
+            # own box. The shaped painter sizes its image from this, so
+            # passing the original box would clip Devanagari output.
+            drawn = Rect(
+                block.rect.x0,
+                block.rect.y0,
+                block.rect.x0 + fit.width,
+                block.rect.y1,
+            )
             painter.paint(
                 page,
                 fit.lines,
-                block.rect,
+                drawn,
                 fit.size,
                 fit.leading,
                 block.alignment,
@@ -173,6 +194,7 @@ class TranslatedPdfRenderer:
         text: str,
         block: TextBlock,
         available_height: float,
+        available_width: float | None = None,
     ) -> BlockFit:
         """Find the largest size at which `text` fits `block`.
 
@@ -185,7 +207,7 @@ class TranslatedPdfRenderer:
             start_size * self.options.minimum_scale, self.options.minimum_point_size
         )
         floor_size = min(floor_size, start_size)
-        width = max(block.rect.width, 1.0)
+        width = max(available_width if available_width is not None else block.rect.width, 1.0)
         step = max(start_size * self.options.size_step, 0.25)
 
         size = start_size
@@ -194,7 +216,7 @@ class TranslatedPdfRenderer:
             leading = self._leading(block, size, start_size)
             height = painter.measure_height(lines, size, leading, block.bold)
             if height <= available_height:
-                return BlockFit(lines, size, leading, height, overflowed=False)
+                return BlockFit(lines, size, leading, height, width, overflowed=False)
             size -= step
 
         # Nothing fits even at the floor. Set it at the floor and let it run on
@@ -202,13 +224,41 @@ class TranslatedPdfRenderer:
         lines = painter.wrap(text, floor_size, width, block.bold)
         leading = self._leading(block, floor_size, start_size)
         height = painter.measure_height(lines, floor_size, leading, block.bold)
-        return BlockFit(lines, floor_size, leading, height, overflowed=True)
+        return BlockFit(lines, floor_size, leading, height, width, overflowed=True)
 
     def _leading(self, block: TextBlock, size: float, start_size: float) -> float:
         """Keep the original leading ratio when the type is shrunk, so a
         tightly set block stays tight and an airy one stays airy."""
         scaled = block.line_height * (size / max(start_size, 0.01))
         return max(scaled, size * 1.05)
+
+    def available_width(self, block: TextBlock, layout: PageLayout) -> float:
+        """How wide a block may be set before it would collide with whatever
+        is beside it.
+
+        A block of several lines occupies a real column, and its width means
+        something: wrapping the translation to it is right. A block of one line
+        has no column — its width is simply how long the original words
+        happened to be. Wrapping to that is what splits a table cell reading
+        "East" across two lines the moment the replacement font is a hair wider
+        than the original, so a single-line block is instead allowed to run
+        rightwards into whatever space is actually free.
+        """
+        if len(block.lines) > 1:
+            return max(block.rect.width, 1.0)
+
+        # Blocks that sit beside this one, overlapping it vertically.
+        beside = [
+            other.rect.x0
+            for other in layout.blocks
+            if other is not block
+            and other.rect.x0 >= block.rect.x1
+            and other.rect.y1 > block.rect.y0
+            and other.rect.y0 < block.rect.y1
+        ]
+        edge = min(beside) if beside else layout.rect.x1
+        room = edge - block.rect.x0 - self.options.horizontal_clearance
+        return max(block.rect.width, room, 1.0)
 
     def available_height(self, block: TextBlock, layout: PageLayout) -> float:
         """How tall a block may grow before it would collide with whatever is

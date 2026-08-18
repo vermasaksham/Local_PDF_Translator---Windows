@@ -6,6 +6,8 @@ whether a two-column page comes out as two columns or as interleaved nonsense.
 
 from __future__ import annotations
 
+import pytest
+
 from local_pdf_translator.pdf.analyser import blocks_from_lines, lines_from_glyphs
 from local_pdf_translator.pdf.layout import Glyph, Rect, TextLine
 
@@ -221,3 +223,58 @@ def test_block_colour_is_the_colour_of_most_of_its_text():
         line("short", 72, 113, 120, 125, color=0x000000),
     ]
     assert blocks_from_lines(lines)[0].color == 0xFFFFFF
+
+
+# -- lists -----------------------------------------------------------------
+
+
+def test_each_bullet_is_its_own_block():
+    # Merged into one block, a list redraws as a single run-on paragraph and
+    # the list is gone.
+    lines = [
+        line("• All figures are unaudited", 84, 100, 300, 112),
+        line("• Comparatives have been restated", 84, 113, 300, 125),
+        line("• The East region has changed", 84, 126, 300, 138),
+    ]
+    assert len(blocks_from_lines(lines)) == 3
+
+
+def test_a_wrapped_list_item_stays_with_its_marker():
+    lines = [
+        line("• All figures are stated in", 84, 100, 300, 112),
+        line("thousands of pounds sterling", 98, 113, 300, 125),
+        line("• Comparatives have been restated", 84, 126, 300, 138),
+    ]
+    blocks = blocks_from_lines(lines)
+    assert len(blocks) == 2
+    assert "thousands of pounds" in blocks[0].joined_text
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "• item",
+        "· item",
+        "- item",
+        "– item",
+        "1. item",
+        "2) item",
+        "(3) item",
+        "a) item",
+        "iv. item",
+    ],
+)
+def test_list_markers_are_recognised(text):
+    from local_pdf_translator.pdf.analyser import starts_a_list_item
+
+    assert starts_a_list_item(text)
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["ordinary prose", "well-known results", "2026 was a good year", "e.g. this one"],
+)
+def test_ordinary_prose_is_not_a_list_item(text):
+    from local_pdf_translator.pdf.analyser import starts_a_list_item
+
+    assert not starts_a_list_item(text)

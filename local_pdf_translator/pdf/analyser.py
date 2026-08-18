@@ -13,6 +13,7 @@ order, so document order is both safer and cheaper.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from itertools import pairwise
 from statistics import median
@@ -211,7 +212,32 @@ def _majority(glyphs: Sequence[Glyph], predicate) -> bool:
 # Block assembly
 
 
+# A line opening with one of these is a new item in a list, not the
+# continuation of the previous one. Merging a list into a single paragraph
+# translates fine but redraws as one run-on block, losing the list entirely.
+_LIST_MARKER = re.compile(
+    r"""^(
+        [\u2022\u00b7\u2023\u25aa\u25e6\u2043\u2219*]   # bullet glyphs
+      | [-\u2013\u2014]\s                                    # dash followed by a space
+      | \(?\d{1,2}[.)]\s                                     # 1.  1)  (1)
+      | \(?[a-z][.)]\s                                        # a.  a)  (a)
+      | \(?[ivx]{1,4}[.)]\s                                   # i.  iv)
+    )""",
+    re.VERBOSE,
+)
+
+
+def starts_a_list_item(text: str) -> bool:
+    """Whether a line opens a new item in a bulleted or numbered list."""
+    return bool(_LIST_MARKER.match(text.strip()))
+
+
 def _same_block(previous: TextLine, nxt: TextLine, block: Sequence[TextLine]) -> bool:
+    # Each list item is its own block, so the list survives being redrawn.
+    # A wrapped continuation line carries no marker and stays where it is.
+    if starts_a_list_item(nxt.text):
+        return False
+
     # A heading and its body text must not merge, or the heading's size is lost
     # when the block is redrawn at a single size.
     smaller = max(min(previous.font_size, nxt.font_size), 0.01)

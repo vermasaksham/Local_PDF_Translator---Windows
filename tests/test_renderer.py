@@ -161,3 +161,58 @@ def test_a_block_beside_another_is_not_blocked_by_it(renderer):
     right = block(x0=300.0, y0=130.0, width=200.0, height=24.0)
     layout = PageLayout(0, Rect(0, 0, 595, 842), [left, right])
     assert renderer.available_height(left, layout) > left.rect.height
+
+
+# -- available width -------------------------------------------------------
+
+
+def single_line_block(text="East", x0=76.0, y0=100.0, width=20.0, size=10.0):
+    rect = Rect(x0, y0, x0 + width, y0 + 12.0)
+    return TextBlock(lines=[TextLine(text, rect, size)], rect=rect)
+
+
+def test_a_single_line_block_may_grow_sideways(renderer):
+    # Its width is just how long the original word was, not a column.
+    target = single_line_block()
+    layout = PageLayout(0, Rect(0, 0, 595, 842), [target])
+    assert renderer.available_width(target, layout) > target.rect.width * 5
+
+
+def test_a_single_line_block_stops_at_its_neighbour(renderer):
+    cell = single_line_block(x0=76.0, width=20.0)
+    neighbour = single_line_block(x0=254.0, width=25.0)
+    layout = PageLayout(0, Rect(0, 0, 595, 842), [cell, neighbour])
+    available = renderer.available_width(cell, layout)
+    assert available <= neighbour.rect.x0 - cell.rect.x0
+    assert available > cell.rect.width
+
+
+def test_a_block_above_another_does_not_limit_its_width(renderer):
+    cell = single_line_block(x0=76.0, y0=100.0)
+    elsewhere = single_line_block(x0=254.0, y0=400.0)
+    layout = PageLayout(0, Rect(0, 0, 595, 842), [cell, elsewhere])
+    # They do not overlap vertically, so the far block is no obstacle.
+    assert renderer.available_width(cell, layout) > 400
+
+
+def test_a_multi_line_block_keeps_its_column_width(renderer):
+    # A real paragraph: its width means something and must be respected.
+    paragraph = block(width=200.0)
+    layout = PageLayout(0, Rect(0, 0, 595, 842), [paragraph])
+    assert renderer.available_width(paragraph, layout) == paragraph.rect.width
+
+
+def test_a_short_label_is_not_split_across_lines(renderer, painter):
+    """The bug this guards against turned a table cell reading "East" into
+    "Eas" and "t" whenever the replacement font was a shade wider."""
+    cell = single_line_block(text="East", width=20.0)
+    layout = PageLayout(0, Rect(0, 0, 595, 842), [cell])
+    fit = renderer.fit(
+        painter,
+        "Osten",
+        cell,
+        renderer.available_height(cell, layout),
+        renderer.available_width(cell, layout),
+    )
+    assert fit.lines == ["Osten"]
+    assert fit.size == cell.representative_font_size
