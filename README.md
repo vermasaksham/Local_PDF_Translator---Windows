@@ -28,9 +28,13 @@ which is the same app for macOS.
 Download `LocalPDFTranslator-x.y.z-Setup.exe` from the
 [Releases](../../releases) page and run it.
 
-The installer is around 700 MB because the translation models are inside it.
-That is the whole point: once installed, the app never needs the network again.
-It installs per-user by default, so it does not require an administrator.
+The installer is about 370 MB, because the translation models are inside it —
+that is the whole point: once installed, the app never needs the network again.
+It unpacks to roughly 800 MB. It installs per-user by default, so it does not
+require an administrator.
+
+The installer is not code-signed, so Windows SmartScreen will warn that the
+publisher is unknown. Choose **More info ▸ Run anyway**.
 
 ---
 
