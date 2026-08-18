@@ -34,20 +34,15 @@ jobs:
           pip install -r requirements-dev.txt
 
       - name: Install Tesseract
-        run: choco install -y tesseract --params "/InstallDir:C:\Tesseract-OCR"
+        run: choco install -y tesseract
 
-      - name: Add the German and Hindi language data
+      # Finds where Chocolatey actually put it, adds the German and Hindi
+      # language data, and exports LPT_TESSERACT_EXE for the steps below.
+      - name: Set up Tesseract language data
         shell: pwsh
-        run: |
-          $tessdata = "C:\Tesseract-OCR\tessdata"
-          foreach ($code in @("deu", "hin", "osd")) {
-            $url = "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/main/$code.traineddata"
-            Invoke-WebRequest -Uri $url -OutFile "$tessdata\$code.traineddata"
-          }
+        run: ./scripts/ci/setup-tesseract.ps1
 
       - name: Run the tests
-        env:
-          LPT_TESSERACT_EXE: C:\Tesseract-OCR\tesseract.exe
         run: python -m pytest tests -q
 
       - name: Check formatting and lint
@@ -91,19 +86,15 @@ jobs:
         run: python scripts/fetch_models.py
 
       - name: Install Tesseract
-        run: choco install -y tesseract --params "/InstallDir:C:\Tesseract-OCR"
+        run: choco install -y tesseract
 
-      - name: Add the German and Hindi language data
+      - name: Set up Tesseract language data
         shell: pwsh
-        run: |
-          $tessdata = "C:\Tesseract-OCR\tessdata"
-          foreach ($code in @("deu", "hin", "osd")) {
-            $url = "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/main/$code.traineddata"
-            Invoke-WebRequest -Uri $url -OutFile "$tessdata\$code.traineddata"
-          }
+        run: ./scripts/ci/setup-tesseract.ps1
 
       - name: Bundle Tesseract into the build
-        run: python scripts/bundle_tesseract.py --source C:\Tesseract-OCR
+        run: python scripts/bundle_tesseract.py --source "$env:TESSERACT_DIR"
+        shell: pwsh
 
       # The AGPL text must ship verbatim with the build, and the installer
       # shows it on its licence page.
@@ -113,13 +104,18 @@ jobs:
       - name: Build the application
         run: python scripts/build_exe.py --clean
 
-      - name: Smoke-test the built application
+      - name: Check the built application is complete
         shell: pwsh
         run: |
-          # It must at least start, load its models and shut down cleanly.
+          # Verifies what a compile cannot: that the models are really in the
+          # bundle, that a real translation comes back, and that Devanagari
+          # can be shaped.
           $env:QT_QPA_PLATFORM = "offscreen"
           & "dist\LocalPDFTranslator\LocalPDFTranslator.exe" --self-test
           if ($LASTEXITCODE -ne 0) { throw "the built application failed its self-test" }
+
+      - name: Install Inno Setup
+        run: choco install -y innosetup
 
       - name: Build the installer
         run: python scripts/build_installer.py

@@ -78,7 +78,8 @@ analysis = Analysis(
     noarchive=False,
 )
 
-pyz = PYZ(analysis.pure, analysis.zipped_data)
+# PyInstaller 6 removed Analysis.zipped_data; PYZ takes the pure modules alone.
+pyz = PYZ(analysis.pure)
 
 executable = EXE(
     pyz,

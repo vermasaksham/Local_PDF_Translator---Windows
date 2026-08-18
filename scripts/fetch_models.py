@@ -31,9 +31,16 @@ VENV_DIR = REPO_ROOT / "build" / "converter-venv"
 # cost small enough not to be visible in ordinary prose.
 QUANTISATION = "int8"
 
+# torch is installed separately, from PyTorch's CPU-only index. The default
+# PyPI wheel carries the whole CUDA runtime — about 2.5 GB — and every byte of
+# it is dead weight here: the converter only ever reads weights off the
+# checkpoint and writes them out again.
+TORCH_REQUIREMENT = "torch"
+TORCH_INDEX = "https://download.pytorch.org/whl/cpu"
+
 CONVERTER_REQUIREMENTS = [
     "ctranslate2>=4.0",
-    "transformers[torch]>=4.30",
+    "transformers>=4.30",
     "sentencepiece",
     "huggingface_hub",
 ]
@@ -64,6 +71,19 @@ def ensure_converter() -> None:
     python = venv_executable("python")
     subprocess.run(
         [str(python), "-m", "pip", "install", "--quiet", "--upgrade", "pip"], check=True
+    )
+    subprocess.run(
+        [
+            str(python),
+            "-m",
+            "pip",
+            "install",
+            "--quiet",
+            TORCH_REQUIREMENT,
+            "--index-url",
+            TORCH_INDEX,
+        ],
+        check=True,
     )
     subprocess.run(
         [str(python), "-m", "pip", "install", "--quiet", *CONVERTER_REQUIREMENTS],
