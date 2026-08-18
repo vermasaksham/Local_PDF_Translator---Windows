@@ -2,7 +2,6 @@
 # build inputs produced by scripts/, not source.
 /models/
 /tesseract/
-/fonts/
 
 # Build output
 /build/

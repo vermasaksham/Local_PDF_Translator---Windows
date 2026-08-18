@@ -27,6 +27,8 @@ class Script(Enum):
             return (
                 "Nirmala.ttf",
                 "mangal.ttf",
+                # Carried in the app's own fonts/ directory as a fallback for
+                # machines with no Devanagari face installed.
                 "NotoSansDevanagari-Regular.ttf",
                 # Trailing entries are Linux faces: they never match on
                 # Windows, and they let the renderer be exercised on a build

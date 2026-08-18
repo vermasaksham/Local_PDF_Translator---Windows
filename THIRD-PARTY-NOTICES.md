@@ -25,12 +25,15 @@ asking the user to install them, so their terms travel with every copy.
 
 ## Fonts
 
-No fonts are redistributed. The app uses whatever is already installed on the
-machine — Segoe UI for Latin text and Nirmala UI for Devanagari, both of which
-ship with Windows 10 and 11 — so no font licence travels with the build.
+The app prefers the fonts already on the machine — Segoe UI for Latin text and
+Nirmala UI for Devanagari, both of which ship with Windows 10 and 11.
 
-If a build ever does bundle a font (by putting one in `fonts/`), its licence
-must be added to this file.
+| Component | Licence | Notes |
+|---|---|---|
+| [Noto Sans Devanagari](https://fonts.google.com/noto/specimen/Noto+Sans+Devanagari) | SIL Open Font License 1.1 | Bundled in `fonts/` as a fallback, because a machine with no Devanagari face cannot draw Hindi at all — and Windows Server images, N editions and stripped installs do not always have Nirmala UI. The licence text travels with it in `fonts/OFL.txt`. |
+
+Any font added to `fonts/` must be listed here, with its licence file
+alongside it.
 
 ## Nothing phones home
 

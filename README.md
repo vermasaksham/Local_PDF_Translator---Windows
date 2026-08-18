@@ -150,7 +150,7 @@ CI workflow runs it on every build.
 python -m pytest
 ```
 
-190 tests, no models required — the engine is stubbed out. The tests that need
+186 tests, no models required — the engine is stubbed out. The tests that need
 Tesseract skip themselves when it is absent.
 
 ---
@@ -180,10 +180,10 @@ Then re-run `python scripts\fetch_models.py`.
 **"N translation models are missing"** — `fetch_models.py` was not run, or was
 run after `build_exe.py`. Run it, then rebuild.
 
-**Hindi comes out as empty boxes** — no Devanagari font. Nirmala UI ships with
-every Windows 8 and later install; if it has been removed, install
-[Noto Sans Devanagari](https://fonts.google.com/noto/specimen/Noto+Sans+Devanagari)
-or drop a `.ttf` into a `fonts\` folder beside the executable.
+**Hindi comes out as empty boxes** — no Devanagari font could be loaded. The
+app prefers Nirmala UI (on every ordinary Windows 8+ install) and falls back to
+the Noto Sans Devanagari it carries in `fonts\`, so this should not happen; if
+it does, check that folder survived the install.
 
 **Hindi vowel signs are in the wrong place** — Qt is not shaping complex
 scripts, almost always because no Devanagari font could be found. Install
