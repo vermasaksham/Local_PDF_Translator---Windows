@@ -82,9 +82,24 @@ def _start_qt():
     return QApplication.instance() or QApplication([])
 
 
+def _stop_qt(application) -> None:
+    """Shut Qt down while the report's exit code still means something.
+
+    Anything Qt is holding when the interpreter finalises can fault during
+    destruction, and a fault after "PASSED" has printed still fails the build
+    — with nothing in the log to say why.
+    """
+    from .pdf.textpainter import release_fonts
+
+    release_fonts()
+    if application is not None:
+        application.processEvents()
+        application.quit()
+
+
 def run() -> int:
     _use_unicode_output()
-    _start_qt()
+    application = _start_qt()
     _say(f"{APP_NAME} {__version__} — self test")
     _say(f"  resources: {resource_root()}")
     _say(f"  models:    {models_directory()}\n")
@@ -172,12 +187,17 @@ def run() -> int:
     _say()
     if results.failures:
         _say(f"FAILED: {len(results.failures)} check(s) — {', '.join(results.failures)}")
-        return 1
-    if results.warnings:
-        _say(f"PASSED with {len(results.warnings)} warning(s).")
+        outcome = 1
     else:
-        _say("PASSED: everything is present.")
-    return 0
+        if results.warnings:
+            _say(f"PASSED with {len(results.warnings)} warning(s).")
+        else:
+            _say("PASSED: everything is present.")
+        outcome = 0
+
+    _stop_qt(application)
+    _say(f"exit code {outcome}")
+    return outcome
 
 
 if __name__ == "__main__":  # pragma: no cover

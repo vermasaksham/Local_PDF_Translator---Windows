@@ -333,6 +333,19 @@ def shaping_available() -> bool:
     return shaping_status()[0]
 
 
+def release_fonts() -> None:
+    """Drop the cached Qt font objects.
+
+    They outlive the QApplication otherwise, and letting the interpreter
+    destroy the application first at shutdown is a documented way to crash —
+    which would turn a passing run into a non-zero exit long after the work
+    was done.
+    """
+    _qt_font.cache_clear()
+    _qt_family.cache_clear()
+    shaping_status.cache_clear()
+
+
 def font_for_devanagari() -> FontChoice:
     from ..core.languages import Script
     from .fonts import font_for_script

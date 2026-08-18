@@ -110,9 +110,23 @@ jobs:
           # Verifies what a compile cannot: that the models are really in the
           # bundle, that a real translation comes back, and that Devanagari
           # can be shaped.
+          #
+          # Start-Process rather than `& exe`, because the app is built for the
+          # Windows GUI subsystem and PowerShell does not reliably wait for
+          # one: the previous run threw "failed its self-test" a full second
+          # before the app had even finished writing its output, reading a
+          # $LASTEXITCODE that had nothing to do with it.
           $env:QT_QPA_PLATFORM = "offscreen"
-          & "dist\LocalPDFTranslator\LocalPDFTranslator.exe" --self-test
-          if ($LASTEXITCODE -ne 0) { throw "the built application failed its self-test" }
+          $process = Start-Process `
+            -FilePath "dist\LocalPDFTranslator\LocalPDFTranslator.exe" `
+            -ArgumentList "--self-test" `
+            -NoNewWindow -Wait -PassThru `
+            -RedirectStandardOutput selftest.out `
+            -RedirectStandardError selftest.err
+          Get-Content selftest.out -Encoding utf8 -ErrorAction SilentlyContinue
+          Get-Content selftest.err -Encoding utf8 -ErrorAction SilentlyContinue
+          Write-Host "self-test exit code: $($process.ExitCode)"
+          if ($process.ExitCode -ne 0) { throw "the built application failed its self-test" }
 
       - name: Install Inno Setup
         run: choco install -y innosetup
