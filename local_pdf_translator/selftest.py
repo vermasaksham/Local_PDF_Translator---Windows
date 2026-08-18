@@ -11,6 +11,7 @@ Exits 0 when everything a user needs is present.
 
 from __future__ import annotations
 
+import contextlib
 import sys
 import traceback
 
@@ -21,6 +22,32 @@ from .core.model_catalog import ModelCatalog
 from .core.paths import models_directory, resource_root
 
 
+def _say(message: str = "") -> None:
+    """Print a line and push it out immediately.
+
+    Unbuffered because this runs as the last gate before an installer is
+    built: if it dies, the output explaining how far it got must already have
+    reached the log, not be sitting in a buffer that the crash discards.
+    """
+    print(message, flush=True)
+
+
+def _use_unicode_output() -> None:
+    """Make stdout able to carry the text this test deliberately prints.
+
+    A Windows console defaults to a legacy code page — cp1252 on an English
+    install — which has no Devanagari at all. The self-test prints the Hindi
+    translation it just produced, so without this it dies with
+    UnicodeEncodeError at the exact moment it is reporting success.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        with contextlib.suppress(OSError, ValueError):
+            reconfigure(encoding="utf-8", errors="replace")
+
+
 class _Results:
     def __init__(self) -> None:
         self.failures: list[str] = []
@@ -28,28 +55,43 @@ class _Results:
 
     def check(self, name: str, condition: bool, detail: str = "") -> bool:
         mark = "ok  " if condition else "FAIL"
-        print(f"  [{mark}] {name}{f' — {detail}' if detail else ''}")
+        _say(f"  [{mark}] {name}{f' — {detail}' if detail else ''}")
         if not condition:
             self.failures.append(name)
         return condition
 
     def warn(self, name: str, condition: bool, detail: str = "") -> bool:
         if condition:
-            print(f"  [ok  ] {name}{f' — {detail}' if detail else ''}")
+            _say(f"  [ok  ] {name}{f' — {detail}' if detail else ''}")
         else:
-            print(f"  [warn] {name}{f' — {detail}' if detail else ''}")
+            _say(f"  [warn] {name}{f' — {detail}' if detail else ''}")
             self.warnings.append(name)
         return condition
 
 
+def _start_qt():
+    """Create the QApplication the rest of the checks need.
+
+    It has to be a QApplication rather than a QGuiApplication, because the
+    interface check builds a real QWidget. And it has to happen first: the
+    shaping check would otherwise create a QGuiApplication of its own, and
+    every later QWidget would fail against it.
+    """
+    from PySide6.QtWidgets import QApplication
+
+    return QApplication.instance() or QApplication([])
+
+
 def run() -> int:
-    print(f"{APP_NAME} {__version__} — self test")
-    print(f"  resources: {resource_root()}")
-    print(f"  models:    {models_directory()}\n")
+    _use_unicode_output()
+    _start_qt()
+    _say(f"{APP_NAME} {__version__} — self test")
+    _say(f"  resources: {resource_root()}")
+    _say(f"  models:    {models_directory()}\n")
     results = _Results()
 
     # -- models
-    print("Translation models")
+    _say("Translation models")
     catalog = ModelCatalog()
     missing = catalog.missing_models
     results.check(
@@ -67,7 +109,7 @@ def run() -> int:
             )
 
     # -- a real translation, which is the only way to know the runtime loaded
-    print("\nTranslation engine")
+    _say("\nTranslation engine")
     if not missing:
         try:
             engine = TranslationEngine(catalog)
@@ -90,7 +132,7 @@ def run() -> int:
         results.check("engine runs", False, "skipped, models are missing")
 
     # -- text rendering
-    print("\nText rendering")
+    _say("\nText rendering")
     from .pdf import fonts
     from .pdf.textpainter import shaping_status
 
@@ -105,7 +147,7 @@ def run() -> int:
     results.check("Devanagari shaping (Qt)", shapes, reason)
 
     # -- OCR is optional; the app is still useful without it
-    print("\nText recognition (optional)")
+    _say("\nText recognition (optional)")
     from .pdf import ocr
 
     availability = ocr.availability()
@@ -115,30 +157,26 @@ def run() -> int:
             results.warn(f"{language.english_name} language data", ocr.supports(language))
 
     # -- the interface
-    print("\nInterface")
+    _say("\nInterface")
     try:
-        from PySide6.QtWidgets import QApplication
-
         from .ui.main_window import MainWindow
 
-        application = QApplication.instance() or QApplication([])
         window = MainWindow()
         window.close()
         del window
-        del application
         results.check("window builds", True)
     except Exception as failure:
         results.check("window builds", False, str(failure))
         traceback.print_exc()
 
-    print()
+    _say()
     if results.failures:
-        print(f"FAILED: {len(results.failures)} check(s) — {', '.join(results.failures)}")
+        _say(f"FAILED: {len(results.failures)} check(s) — {', '.join(results.failures)}")
         return 1
     if results.warnings:
-        print(f"PASSED with {len(results.warnings)} warning(s).")
+        _say(f"PASSED with {len(results.warnings)} warning(s).")
     else:
-        print("PASSED: everything is present.")
+        _say("PASSED: everything is present.")
     return 0
 
 
