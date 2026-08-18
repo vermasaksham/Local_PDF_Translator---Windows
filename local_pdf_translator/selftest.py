@@ -2,7 +2,7 @@
 
 Run with `LocalPDFTranslator.exe --self-test`. This is what the build pipeline
 uses to catch the failures that a compile cannot: models left out of the
-bundle, a Pillow without Raqm, a missing Devanagari font. Each of those
+bundle, a missing Devanagari font, a Qt that will not shape. Each of those
 produces an app that starts perfectly well and is then wrong or useless, so
 they are worth an explicit check.
 
@@ -102,7 +102,7 @@ def run() -> int:
             results.check(f"font for {language.english_name}", False, str(failure))
     # Not a warning: without shaping, Hindi output is wrong rather than ugly.
     results.check(
-        "Devanagari shaping (Pillow/Raqm)",
+        "Devanagari shaping (Qt)",
         shaping_available(),
         "" if shaping_available() else "Hindi would render incorrectly",
     )

@@ -74,12 +74,12 @@ def test_only_devanagari_is_declared_as_needing_shaping():
 
 
 def test_shaping_is_available():
-    """Pillow must be built with Raqm, or Hindi output is silently wrong.
+    """Complex scripts must really be shaped, or Hindi output is silently wrong.
 
     If this fails, the app still runs — it shows a banner saying so — but the
     Hindi output is not trustworthy.
     """
-    assert shaping_available(), "Pillow has no Raqm support; Devanagari will not shape"
+    assert shaping_available(), "Devanagari is not being shaped"
 
 
 # -- colour ----------------------------------------------------------------

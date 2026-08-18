@@ -15,6 +15,20 @@ from local_pdf_translator.core import languages
 from local_pdf_translator.core.model_catalog import BUNDLED, ModelCatalog
 
 
+@pytest.fixture(scope="session", autouse=True)
+def qt_application():
+    """Devanagari is shaped by Qt, and Qt insists on being started from the
+    main thread. The real app has a QApplication long before any of this runs;
+    the tests have to make one themselves."""
+    import os
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtGui import QGuiApplication
+
+    application = QGuiApplication.instance() or QGuiApplication([])
+    yield application
+
+
 class StubEngine:
     """Stands in for the real engine so the PDF pipeline can be tested without
     a gigabyte of model weights.

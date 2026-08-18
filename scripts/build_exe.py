@@ -70,17 +70,17 @@ def check_optional_payloads() -> None:
         )
 
     try:
-        from PIL import features
+        from local_pdf_translator.pdf.textpainter import shaping_available
 
-        if not features.check("raqm"):
+        if not shaping_available():
             warn(
-                "this Pillow has no Raqm support; Hindi output will not be shaped "
-                "correctly. Reinstall Pillow from a standard wheel."
+                "complex-script shaping is not working here, so Hindi output would "
+                "not be trustworthy. Check that a Devanagari font is installed."
             )
         else:
-            log("Pillow has Raqm; Devanagari will shape correctly")
-    except ImportError:
-        die("Pillow is not installed. Run: pip install -r requirements.txt")
+            log("Devanagari shaping works")
+    except Exception as failure:
+        warn(f"could not check complex-script shaping: {failure}")
 
 
 def write_version_info() -> None:

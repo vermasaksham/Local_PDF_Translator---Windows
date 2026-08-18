@@ -10,9 +10,15 @@ Two backends, chosen by the target language's script:
   engine: it emits code points in logical order, so `कि` comes out with the
   vowel sign on the wrong side of its consonant, and conjuncts never form. That
   is not a cosmetic problem, it is wrong text. Hindi is therefore laid out by
-  HarfBuzz (through Pillow's Raqm layout engine) and placed as a high-resolution
-  image. The trade-off is that Hindi output is a picture of text rather than
-  selectable text — correctness bought at the price of searchability.
+  Qt's text engine — which shapes complex scripts with its own HarfBuzz — and
+  placed as a high-resolution image. The trade-off is that Hindi output is a
+  picture of text rather than selectable text: correctness bought at the price
+  of searchability.
+
+  Qt rather than Pillow's Raqm layout engine, which was the obvious choice and
+  the wrong one: Raqm ships only in Pillow's Linux wheels, so on Windows — the
+  platform this app targets — it silently is not there and Devanagari comes out
+  unshaped. Qt is already a hard dependency and shapes correctly everywhere.
 
 Both backends expose the same measure/wrap/paint interface so the renderer does
 not care which one it is holding.
@@ -20,7 +26,7 @@ not care which one it is holding.
 
 from __future__ import annotations
 
-import io
+import os
 from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import lru_cache
@@ -228,49 +234,126 @@ def _aligned_x(rect: Rect, width: float, alignment: str) -> float:
 # Shaped: HarfBuzz layout rasterised, for Devanagari
 
 
-class ShapingUnavailable(RuntimeError):
-    """Pillow was built without Raqm, so Devanagari cannot be laid out."""
+def _qt_application():
+    """The QGuiApplication that Qt's font machinery needs.
+
+    The app always has one by the time any of this runs. Headless callers (the
+    tests, `--self-test`) may not, so one is created on demand — which only
+    works on the main thread, hence the explicit error rather than a hang.
+    """
+    from PySide6.QtGui import QGuiApplication
+
+    existing = QGuiApplication.instance()
+    if existing is not None:
+        return existing
+
+    import threading
+
+    if threading.current_thread() is not threading.main_thread():
+        raise RuntimeError(
+            "Qt has to be initialised on the main thread before text can be shaped. "
+            "Create a QGuiApplication before starting the translation."
+        )
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    return QGuiApplication([])
 
 
-def shaping_available() -> bool:
-    try:
-        from PIL import features
-    except ImportError:  # pragma: no cover - Pillow is a hard dependency
-        return False
-    return bool(features.check("raqm"))
+@lru_cache(maxsize=8)
+def _qt_family(path: str) -> str:
+    """Register a font file with Qt and return the family name it took."""
+    from PySide6.QtGui import QFontDatabase
+
+    _qt_application()
+    identifier = QFontDatabase.addApplicationFont(path)
+    families = QFontDatabase.applicationFontFamilies(identifier)
+    if not families:
+        raise ShapingUnavailable(f"Qt could not load the font at {path}")
+    return families[0]
 
 
 @lru_cache(maxsize=16)
-def _pil_font(path: str, pixel_size: int):
-    from PIL import ImageFont
+def _qt_font(path: str, pixel_size: int, bold: bool):
+    from PySide6.QtGui import QFont
 
-    layout = ImageFont.Layout.RAQM if shaping_available() else ImageFont.Layout.BASIC
-    return ImageFont.truetype(path, pixel_size, layout_engine=layout)
+    font = QFont(_qt_family(path))
+    font.setPixelSize(max(pixel_size, 1))
+    if bold:
+        font.setBold(True)
+    # Qt only runs its shaper when it is allowed to lay text out properly;
+    # NoFontMerging keeps it from substituting a face that cannot do the job.
+    font.setStyleStrategy(QFont.StyleStrategy.PreferQuality)
+    return font
+
+
+class ShapingUnavailable(RuntimeError):
+    """Devanagari cannot be laid out on this machine."""
+
+
+@lru_cache(maxsize=1)
+def shaping_available() -> bool:
+    """Whether complex-script text really is being shaped.
+
+    A functional check rather than a version check: it lays out a Devanagari
+    string that must form a conjunct and compares the result with the width of
+    the same code points measured one at a time. If a shaper ran, the two
+    disagree. If they match, the glyphs are being emitted in logical order and
+    Hindi output would be wrong.
+    """
+    from PySide6.QtGui import QFontMetricsF
+
+    try:
+        choice = font_for_devanagari()
+        _qt_application()
+        font = _qt_font(str(choice.regular), int(_REFERENCE_SIZE), False)
+        metrics = QFontMetricsF(font)
+        shaped = metrics.horizontalAdvance(_SHAPING_PROBE)
+        naive = sum(metrics.horizontalAdvance(character) for character in _SHAPING_PROBE)
+    except Exception:
+        return False
+    return shaped > 0 and abs(shaped - naive) > 0.5
+
+
+def font_for_devanagari() -> FontChoice:
+    from ..core.languages import Script
+    from .fonts import font_for_script
+
+    return font_for_script(Script.DEVANAGARI)
+
+
+#: "ti-ma-hi ri-po-rt" — contains a matra that must be reordered and a
+#: consonant cluster that must form a conjunct.
+_SHAPING_PROBE = "तिमाही रिपोर्ट"
 
 
 class ShapedTextPainter(TextPainter):
-    """Lays text out with HarfBuzz and places it as a high-resolution image."""
+    """Lays text out with Qt's shaper and places it as a high-resolution image."""
 
     def __init__(self, font: FontChoice, scale: float = SHAPED_IMAGE_SCALE) -> None:
         super().__init__(font)
         self.scale = scale
 
-    def _reference(self, bold: bool):
-        return _pil_font(str(self.font.file_for(bold)), int(_REFERENCE_SIZE))
+    def _metrics_at_reference(self, bold: bool):
+        from PySide6.QtGui import QFontMetricsF
+
+        font = _qt_font(str(self.font.file_for(bold)), int(_REFERENCE_SIZE), bold)
+        return QFontMetricsF(font)
 
     def text_width(self, text: str, size: float, bold: bool = False) -> float:
         if not text:
             return 0.0
-        reference = self._reference(bold)
-        # Measured once at the reference size and scaled: advances are linear
-        # in size, and this avoids building a face per candidate size during
-        # the shrink-to-fit search.
-        return float(reference.getlength(text)) * size / _REFERENCE_SIZE
+        # Measured once at a reference size and scaled: advances are linear in
+        # size, and this avoids building a face per candidate size during the
+        # shrink-to-fit search.
+        advance = self._metrics_at_reference(bold).horizontalAdvance(text)
+        return float(advance) * size / _REFERENCE_SIZE
 
     def metrics(self, size: float, bold: bool = False) -> LineMetrics:
-        ascent, descent = self._reference(bold).getmetrics()
+        reference = self._metrics_at_reference(bold)
         factor = size / _REFERENCE_SIZE
-        return LineMetrics(ascender=ascent * factor, descender=descent * factor)
+        return LineMetrics(
+            ascender=float(reference.ascent()) * factor,
+            descender=float(reference.descent()) * factor,
+        )
 
     def paint(
         self,
@@ -283,14 +366,16 @@ class ShapedTextPainter(TextPainter):
         colour: tuple[float, float, float],
         bold: bool = False,
     ) -> None:
-        drawn = [line for line in lines if line]
-        if not drawn:
+        if not any(lines):
             return
 
-        from PIL import Image, ImageDraw
+        from PySide6.QtCore import QBuffer, QPointF
+        from PySide6.QtGui import QColor, QFontMetricsF, QImage, QPainter
 
-        metrics = self.metrics(size, bold)
-        block_height = leading * (len(lines) - 1) + metrics.height
+        _qt_application()
+
+        block_metrics = self.metrics(size, bold)
+        block_height = leading * (len(lines) - 1) + block_metrics.height
         # The image covers the text's own extent rather than the whole block,
         # so a short translation does not paint a large transparent rectangle
         # over whatever sits beneath it.
@@ -308,25 +393,38 @@ class ShapedTextPainter(TextPainter):
         scale_x = width_px / target.width if target.width else self.scale
         scale_y = height_px / target.height if target.height else self.scale
 
-        image = Image.new("RGBA", (width_px, height_px), (0, 0, 0, 0))
-        draw = ImageDraw.Draw(image)
-        face = _pil_font(str(self.font.file_for(bold)), max(round(size * scale_y), 1))
-        ink = tuple(round(channel * 255) for channel in colour) + (255,)
+        image = QImage(width_px, height_px, QImage.Format.Format_ARGB32_Premultiplied)
+        image.fill(QColor(0, 0, 0, 0))
 
-        for index, line in enumerate(lines):
-            if not line:
-                continue
-            width_pt = self.text_width(line, size, bold)
-            x = (_aligned_x(target, width_pt, alignment) - target.x0) * scale_x
-            y = index * leading * scale_y
-            # "la" anchors the text by its ascender, matching the vector path.
-            draw.text((x, y), line, font=face, fill=ink, anchor="la")
+        font = _qt_font(str(self.font.file_for(bold)), max(round(size * scale_y), 1), bold)
+        ink = QColor.fromRgbF(*colour)
 
-        buffer = io.BytesIO()
-        image.save(buffer, format="PNG", optimize=True)
+        painter = QPainter(image)
+        try:
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
+            painter.setFont(font)
+            painter.setPen(ink)
+            ascent = QFontMetricsF(font).ascent()
+            for index, line in enumerate(lines):
+                if not line:
+                    continue
+                width_pt = self.text_width(line, size, bold)
+                x = (_aligned_x(target, width_pt, alignment) - target.x0) * scale_x
+                baseline = ascent + index * leading * scale_y
+                painter.drawText(QPointF(x, baseline), line)
+        finally:
+            painter.end()
+
+        buffer = QBuffer()
+        buffer.open(QBuffer.OpenModeFlag.ReadWrite)
+        image.save(buffer, "PNG")
+        data = bytes(buffer.data())
+        buffer.close()
+
         page.insert_image(
             pymupdf.Rect(*target.as_tuple()),
-            stream=buffer.getvalue(),
+            stream=data,
             keep_proportion=False,
             overlay=True,
         )

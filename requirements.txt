@@ -4,8 +4,5 @@
 # Charts, 3D) add roughly 300 MB and none of them are used.
 PySide6-Essentials>=6.6,<7
 PyMuPDF>=1.24,<2
-# Pillow's Windows and macOS wheels bundle libraqm, which is what shapes
-# Devanagari correctly. A build without it makes Hindi output wrong, not ugly.
-Pillow>=10.2
 ctranslate2>=4.0,<5
 sentencepiece>=0.2

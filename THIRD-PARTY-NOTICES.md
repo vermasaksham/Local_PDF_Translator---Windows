@@ -9,8 +9,8 @@ asking the user to install them, so their terms travel with every copy.
 | Component | Licence | Why it is here |
 |---|---|---|
 | [PyMuPDF](https://pymupdf.readthedocs.io/) | **AGPL-3.0** or Artifex commercial | Reads per-character geometry out of PDFs, removes the original text with redactions, and draws the replacement. This is the component that forces the project's own licence — see `LICENSE`. |
-| [PySide6](https://doc.qt.io/qtforpython/) (Essentials) | LGPL-3.0 | The interface. Used unmodified and dynamically linked, which is what the LGPL asks for. The one-folder build keeps the Qt DLLs as separate files so they can be replaced. |
-| [Pillow](https://python-pillow.org/) | MIT-CMU | Rasterises shaped Devanagari text. Its bundled **libraqm** (MIT) and **HarfBuzz** (MIT) do the actual shaping. |
+| [PySide6](https://doc.qt.io/qtforpython/) (Essentials) | LGPL-3.0 | The interface, and the text shaper that makes Hindi output correct. Used unmodified and dynamically linked, which is what the LGPL asks for. The one-folder build keeps the Qt DLLs as separate files so they can be replaced. |
+| [HarfBuzz](https://harfbuzz.github.io/) | MIT | Shapes Devanagari. Not a separate dependency — it is built into Qt, which is what lays out and rasterises Hindi text. |
 | [CTranslate2](https://github.com/OpenNMT/CTranslate2) | MIT | Runs the translation models on the CPU with int8 quantisation. |
 | [SentencePiece](https://github.com/google/sentencepiece) | Apache-2.0 | Tokenises text the way the OPUS-MT models expect. |
 | [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) | Apache-2.0 | Reads scanned pages. Bundled as a separate executable, invoked as a subprocess. |

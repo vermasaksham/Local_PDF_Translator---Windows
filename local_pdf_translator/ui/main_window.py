@@ -114,14 +114,14 @@ class MainWindow(QMainWindow):
             )
 
         if not shaping_available():
-            # Without Raqm, Devanagari would be drawn with its vowel signs in
-            # the wrong places — wrong text, not merely ugly text.
+            # Without shaping, Devanagari would be drawn with its vowel signs
+            # in the wrong places — wrong text, not merely ugly text.
             banners.append(
                 _banner(
                     "Hindi output will not be shaped correctly",
-                    "This build of Pillow has no Raqm support, so Devanagari conjuncts and "
-                    "vowel signs cannot be positioned properly. Reinstall Pillow from a "
-                    "standard wheel (pip install --force-reinstall pillow).",
+                    "Qt is not shaping complex scripts on this machine, so Devanagari "
+                    "conjuncts and vowel signs cannot be positioned properly. Check that "
+                    "a Devanagari font (Nirmala UI) is installed.",
                 )
             )
 

@@ -95,8 +95,8 @@ how many blocks had to overflow.
 shaping engine: it emits code points in logical order, so `कि` would come out
 with its vowel sign on the wrong side of the consonant and conjuncts would never
 form. That is wrong text, not merely ugly text. Devanagari is therefore laid out
-by HarfBuzz (through Pillow's Raqm engine) and placed as a high-resolution
-image. The trade-off is that Hindi output is a picture of text rather than
+by Qt's text engine — which shapes complex scripts with its own HarfBuzz — and
+placed as a high-resolution image. The trade-off is that Hindi output is a picture of text rather than
 selectable text; English and German are written as real, searchable text.
 
 ---
@@ -141,7 +141,7 @@ dist\LocalPDFTranslator\LocalPDFTranslator.exe --self-test
 
 This verifies the things a compiler cannot: that every model made it into the
 bundle, that all six language routes resolve, that a real translation comes back
-non-empty, that a Devanagari font is present, and that Pillow can shape it. The
+non-empty, that a Devanagari font is present, and that Qt really shapes it. The
 CI workflow runs it on every build.
 
 ### Tests
@@ -150,7 +150,7 @@ CI workflow runs it on every build.
 python -m pytest
 ```
 
-166 tests, no models required — the engine is stubbed out. The tests that need
+190 tests, no models required — the engine is stubbed out. The tests that need
 Tesseract skip themselves when it is absent.
 
 ---
@@ -185,9 +185,10 @@ every Windows 8 and later install; if it has been removed, install
 [Noto Sans Devanagari](https://fonts.google.com/noto/specimen/Noto+Sans+Devanagari)
 or drop a `.ttf` into a `fonts\` folder beside the executable.
 
-**Hindi vowel signs are in the wrong place** — Pillow was built without Raqm.
-`pip install --force-reinstall pillow` from a standard wheel. The app shows a
-banner when it detects this.
+**Hindi vowel signs are in the wrong place** — Qt is not shaping complex
+scripts, almost always because no Devanagari font could be found. Install
+Nirmala UI or Noto Sans Devanagari. The app shows a banner when it detects
+this, and `--self-test` checks it explicitly.
 
 **"This PDF has no text layer"** — it is a scan. Tick *Read scanned pages with
 OCR*. If the option is greyed out, Tesseract is not bundled in this build.
