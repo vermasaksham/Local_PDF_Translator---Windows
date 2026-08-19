@@ -28,6 +28,9 @@ which is the same app for macOS.
 Download `LocalPDFTranslator-x.y.z-Setup.exe` from the
 [Releases](../../releases) page and run it.
 
+If that page is empty, no release has been published yet — see
+[Publishing a release](#publishing-a-release).
+
 The installer is about 370 MB, because the translation models are inside it —
 that is the whole point: once installed, the app never needs the network again.
 It unpacks to roughly 800 MB. It installs per-user by default, so it does not
@@ -126,6 +129,20 @@ python scripts\build_installer.py    # 4. wrap it in an installer
 
 Steps 1 and 2 are one-time. After that, `build_exe.py` alone rebuilds in about a
 minute.
+
+### Publishing a release
+
+The installer is built by CI, not committed — it is far too large for a git
+repository. To put one on the [Releases](../../releases) page, open the Actions
+tab, choose **Build Windows installer**, click **Run workflow**, and set
+`release_tag` to the version (`v1.0.0`). The run builds the installer and
+publishes it as a release, creating the tag as it goes. Pushing a `v*` tag does
+the same thing.
+
+Every other run uploads the installer as a workflow *artifact* instead. That is
+fine for testing, but it is a zip rather than an `.exe`, it can only be
+downloaded by someone signed in to GitHub, and it is deleted after 90 days — so
+it is not a way to hand the app to anyone.
 
 To run from source without building anything:
 

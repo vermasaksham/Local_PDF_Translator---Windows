@@ -1,8 +1,13 @@
 name: Build Windows installer
 
 # The installer can only be built on Windows, so this workflow is the way to
-# get one without a Windows machine to hand. Push a tag, or run it by hand from
-# the Actions tab, and the finished .exe comes out as an artifact.
+# get one without a Windows machine to hand. Run it by hand from the Actions tab
+# and the finished .exe comes out as an artifact.
+#
+# To publish it where people can actually download it, run it by hand and fill
+# in `release_tag` (e.g. v1.0.0). That publishes a GitHub Release and creates
+# the tag along with it, so a release does not require pushing a tag first.
+# Pushing a v* tag still works and does the same thing.
 
 on:
   push:
@@ -12,6 +17,11 @@ on:
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Publish a Release under this tag, e.g. v1.0.0. Blank = build the artifact only."
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -136,8 +146,23 @@ jobs:
           path: dist/installer/*.exe
           if-no-files-found: error
 
-      - name: Attach the installer to the release
-        if: startsWith(github.ref, 'refs/tags/v')
+      # Publishing puts the .exe somewhere a person can download without being
+      # signed in to GitHub. The workflow artifact above cannot do that: it is
+      # a zip, it needs an account, and it is deleted after 90 days.
+      - name: Publish the installer as a release
+        if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.release_tag != ''
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.event.inputs.release_tag || github.ref_name }}
           files: dist/installer/*.exe
+          fail_on_unmatched_files: true
+          body: |
+            Download the `LocalPDFTranslator-...-Setup.exe` attached below and
+            run it. Windows 10 (build 1507) or later, 64-bit.
+
+            The installer is unsigned, so SmartScreen will say the publisher is
+            unknown — choose **More info > Run anyway**. It installs per-user, so
+            it does not need an administrator.
+
+            It is large because the translation models are inside it. That is the
+            point: once installed the app never touches the network again.
