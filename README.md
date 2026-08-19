@@ -212,8 +212,8 @@ worse than leaving it.
 
 The app makes no network requests. There is no telemetry, no update check, no
 model download at runtime, and no account. The only scripts that touch the
-network are `fetch_models.py` and `fetch_license.py`, and they run on the build
-machine, never on a user's.
+network is `fetch_models.py`, and it runs on the build machine, never on a
+user's.
 
 Translated PDFs are written to `%LOCALAPPDATA%\LocalPDFTranslator\output` until
 you choose where to save them; the uninstaller removes that folder.

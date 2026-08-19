@@ -96,11 +96,6 @@ jobs:
         run: python scripts/bundle_tesseract.py --source "$env:TESSERACT_DIR"
         shell: pwsh
 
-      # The AGPL text must ship verbatim with the build, and the installer
-      # shows it on its licence page.
-      - name: Vendor the full licence text
-        run: python scripts/fetch_license.py
-
       - name: Build the application
         run: python scripts/build_exe.py --clean
 

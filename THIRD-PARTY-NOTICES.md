@@ -39,5 +39,5 @@ alongside it.
 
 The app makes no network requests at all. There is no telemetry, no update
 check, no model download at runtime, and no account. The only scripts that use
-the network are `scripts/fetch_models.py` and `scripts/fetch_license.py`, which
+the network are `scripts/fetch_models.py` and `scripts/fetch_fonts.py`, which
 run on the build machine, never on a user's.
