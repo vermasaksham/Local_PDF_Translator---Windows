@@ -29,6 +29,60 @@ def _default_thread_count() -> int:
     return max(1, (os.cpu_count() or 2) - 1)
 
 
+#: Penalty applied to tokens the decoder has already emitted. OPUS-MT ships
+#: with none, and without one it will happily fall into a loop — see
+#: `_decoding_cap` for why that matters so much here. Kept mild: a large
+#: penalty starts suppressing words that genuinely do recur in a sentence.
+REPETITION_PENALTY = 1.1
+
+#: Hard block on repeating any 4-token run within one sentence. This is what
+#: actually stops "26 26 26 26 26"; the penalty above only makes it expensive.
+#: Four rather than three because German compounds legitimately repeat short
+#: subword runs, and a 4-gram repeat inside a single sentence essentially
+#: never happens in real text.
+NO_REPEAT_NGRAM_SIZE = 4
+
+#: A translation is longer than its source — German runs 15-30% longer than
+#: English — but never many times longer. Three times the source plus a little
+#: slack is well clear of any legitimate output while still being a hard stop.
+LENGTH_MULTIPLIER = 3
+LENGTH_SLACK = 8
+
+#: Below this a cap is more likely to truncate a legitimate short sentence
+#: than to catch a runaway, so short input gets a floor rather than 3x.
+MINIMUM_DECODING_LENGTH = 16
+
+#: Sentences are grouped so the longest in a group is at most this many times
+#: the shortest. Without grouping, one long paragraph sharing a batch with a
+#: heading would raise the cap for both and leave the heading unprotected.
+BUCKET_LENGTH_RATIO = 2
+
+
+def _decoding_cap(source_length: int) -> int:
+    """The most tokens a translation of this many source tokens may use."""
+    return max(MINIMUM_DECODING_LENGTH, source_length * LENGTH_MULTIPLIER + LENGTH_SLACK)
+
+
+def _length_buckets(
+    indices: Sequence[int], encoded: Sequence[Sequence[str]]
+) -> list[list[int]]:
+    """Split indices into groups of similar source length, shortest first.
+
+    `max_decoding_length` is one number for the whole CTranslate2 call, so a
+    batch is only as protected as its longest member. Grouping by length lets
+    each call carry a cap that is tight for everything in it.
+    """
+    ordered = sorted(indices, key=lambda index: len(encoded[index]))
+    buckets: list[list[int]] = []
+    for index in ordered:
+        length = len(encoded[index])
+        if buckets and length <= len(encoded[buckets[-1][0]]) * BUCKET_LENGTH_RATIO:
+            buckets[-1].append(index)
+        else:
+            buckets.append([index])
+    return buckets
+
+
 @dataclass
 class _LoadedModel:
     """A CTranslate2 translator with its two SentencePiece processors."""
@@ -45,17 +99,23 @@ class _LoadedModel:
         if not indices:
             return list(sentences)
 
-        results = self.translator.translate_batch(
-            [encoded[index] for index in indices],
-            beam_size=beam_size,
-            max_batch_size=0,
-            replace_unknowns=True,
-        )
-
         output = list(sentences)
-        for index, result in zip(indices, results, strict=True):
-            hypotheses = getattr(result, "hypotheses", None) or [[]]
-            output[index] = self.target_tokenizer.decode(hypotheses[0])
+        for bucket in _length_buckets(indices, encoded):
+            longest = max(len(encoded[index]) for index in bucket)
+            results = self.translator.translate_batch(
+                [encoded[index] for index in bucket],
+                beam_size=beam_size,
+                max_batch_size=0,
+                replace_unknowns=True,
+                # Without these three a short heading decodes into hundreds of
+                # tokens of one repeated word. See tests/test_engine.py.
+                repetition_penalty=REPETITION_PENALTY,
+                no_repeat_ngram_size=NO_REPEAT_NGRAM_SIZE,
+                max_decoding_length=_decoding_cap(longest),
+            )
+            for index, result in zip(bucket, results, strict=True):
+                hypotheses = getattr(result, "hypotheses", None) or [[]]
+                output[index] = self.target_tokenizer.decode(hypotheses[0])
         return output
 
 

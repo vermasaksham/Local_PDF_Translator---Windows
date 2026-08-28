@@ -12,6 +12,7 @@ import threading
 
 import pytest
 
+from local_pdf_translator.core import engine as engine_module
 from local_pdf_translator.core import errors, languages
 from local_pdf_translator.core.engine import TranslationEngine
 
@@ -200,9 +201,11 @@ class FakeResult:
 class FakeTranslator:
     def __init__(self) -> None:
         self.batches: list[list[list[str]]] = []
+        self.calls: list[dict] = []
 
     def translate_batch(self, batches, **kwargs):
         self.batches.append([list(tokens) for tokens in batches])
+        self.calls.append(kwargs)
         return [FakeResult([[token.upper() for token in tokens]]) for tokens in batches]
 
 
@@ -254,3 +257,76 @@ def test_a_model_failure_is_wrapped_with_context(installed_catalog, monkeypatch)
     with pytest.raises(errors.TranslationFailed) as failure:
         english_to_german(engine, ["anything."])
     assert "CTranslate2 fell over" in str(failure.value)
+
+
+# -- runaway repetition -----------------------------------------------------
+#
+# A nine-page document came back with 40% of its blocks decoded into things
+# like "Sach Sach Sach" repeated two hundred times, and "August 13, 2026"
+# turned into 253 tokens of "13 13 26 26". OPUS-MT loops on short input, and
+# CTranslate2 does nothing about it by default: repetition_penalty is 1,
+# no_repeat_ngram_size is 0, and max_decoding_length is 256 regardless of how
+# short the source was. A three-token heading was free to emit 256 tokens.
+
+
+def test_the_decoder_is_given_repetition_guards():
+    model = loaded_model()
+    model.translate(["hello world"], beam_size=4)
+
+    (call,) = model.translator.calls
+    assert call["repetition_penalty"] > 1
+    assert call["no_repeat_ngram_size"] >= 3
+
+
+def test_short_input_cannot_decode_into_a_long_run():
+    """The cap is the backstop: whatever the model wants to do, a heading
+    cannot come back as a paragraph."""
+    model = loaded_model()
+    model.translate(["hello world"], beam_size=4)
+
+    (call,) = model.translator.calls
+    # Two source tokens. The old default let this reach 256.
+    assert call["max_decoding_length"] < 32
+
+
+def test_the_cap_still_leaves_room_for_a_real_translation():
+    """German runs longer than English; the cap must not truncate it."""
+    source_tokens = 40
+    assert engine_module._decoding_cap(source_tokens) >= source_tokens * 2
+
+
+def test_a_long_sentence_does_not_raise_the_cap_for_a_short_one():
+    """max_decoding_length is one number per CTranslate2 call, so a heading
+    batched with a paragraph would inherit the paragraph's cap and stay
+    unprotected. Sentences are grouped by length to prevent exactly that."""
+    model = loaded_model()
+    model.translate(["hi", " ".join(["word"] * 60)], beam_size=4)
+
+    assert len(model.translator.calls) == 2
+    caps = sorted(call["max_decoding_length"] for call in model.translator.calls)
+    assert caps[0] < 32, "the short sentence kept a tight cap"
+    assert caps[1] > 100, "the long sentence still has room"
+
+
+def test_grouping_by_length_preserves_the_caller_ordering():
+    """Buckets are emitted shortest-first, which is not document order."""
+    model = loaded_model()
+    result = model.translate(
+        ["a much longer sentence than the others here", "tiny", "middling length one"],
+        beam_size=4,
+    )
+    assert result == [
+        "A MUCH LONGER SENTENCE THAN THE OTHERS HERE",
+        "TINY",
+        "MIDDLING LENGTH ONE",
+    ]
+
+
+def test_every_sentence_is_translated_exactly_once_when_bucketed():
+    model = loaded_model()
+    sentences = ["one", "two three four five six", "seven", "eight nine ten eleven twelve"]
+    result = model.translate(sentences, beam_size=4)
+
+    assert result == [sentence.upper() for sentence in sentences]
+    decoded = [tokens for batch in model.translator.batches for tokens in batch]
+    assert len(decoded) == len(sentences)
