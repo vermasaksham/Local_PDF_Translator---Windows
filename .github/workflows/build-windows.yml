@@ -1,0 +1,168 @@
+name: Build Windows installer
+
+# The installer can only be built on Windows, so this workflow is the way to
+# get one without a Windows machine to hand. Run it by hand from the Actions tab
+# and the finished .exe comes out as an artifact.
+#
+# To publish it where people can actually download it, run it by hand and fill
+# in `release_tag` (e.g. v1.0.0). That publishes a GitHub Release and creates
+# the tag along with it, so a release does not require pushing a tag first.
+# Pushing a v* tag still works and does the same thing.
+
+on:
+  push:
+    # Feature branches included deliberately: this is how the installer gets
+    # built at all, so it has to run before anything reaches main.
+    branches: [main, "claude/**"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Publish a Release under this tag, e.g. v1.0.0. Blank = build the artifact only."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Tests
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Install Tesseract
+        run: choco install -y tesseract
+
+      # Finds where Chocolatey actually put it, adds the German and Hindi
+      # language data, and exports LPT_TESSERACT_EXE for the steps below.
+      - name: Set up Tesseract language data
+        shell: pwsh
+        run: ./scripts/ci/setup-tesseract.ps1
+
+      - name: Run the tests
+        run: python -m pytest tests -q
+
+      - name: Check formatting and lint
+        run: |
+          ruff check local_pdf_translator scripts tests
+          ruff format --check local_pdf_translator scripts tests
+
+  build:
+    name: Installer
+    runs-on: windows-latest
+    needs: test
+    # Read is enough to build; the tagged-release step below needs to write
+    # the installer back to the release, so this job is granted more than the
+    # workflow default above.
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      # The converted models are ~300 MB and take about ten minutes to build,
+      # so they are cached on the model list rather than rebuilt every run.
+      - name: Restore the converted models
+        id: models
+        uses: actions/cache@v4
+        with:
+          path: models
+          key: models-${{ hashFiles('local_pdf_translator/core/model_catalog.py') }}
+
+      - name: Convert the translation models
+        if: steps.models.outputs.cache-hit != 'true'
+        run: python scripts/fetch_models.py
+
+      - name: Install Tesseract
+        run: choco install -y tesseract
+
+      - name: Set up Tesseract language data
+        shell: pwsh
+        run: ./scripts/ci/setup-tesseract.ps1
+
+      - name: Bundle Tesseract into the build
+        run: python scripts/bundle_tesseract.py --source "$env:TESSERACT_DIR"
+        shell: pwsh
+
+      - name: Build the application
+        run: python scripts/build_exe.py --clean
+
+      - name: Check the built application is complete
+        shell: pwsh
+        run: |
+          # Verifies what a compile cannot: that the models are really in the
+          # bundle, that a real translation comes back, and that Devanagari
+          # can be shaped.
+          #
+          # Start-Process rather than `& exe`, because the app is built for the
+          # Windows GUI subsystem and PowerShell does not reliably wait for
+          # one: the previous run threw "failed its self-test" a full second
+          # before the app had even finished writing its output, reading a
+          # $LASTEXITCODE that had nothing to do with it.
+          $env:QT_QPA_PLATFORM = "offscreen"
+          $process = Start-Process `
+            -FilePath "dist\LocalPDFTranslator\LocalPDFTranslator.exe" `
+            -ArgumentList "--self-test" `
+            -NoNewWindow -Wait -PassThru `
+            -RedirectStandardOutput selftest.out `
+            -RedirectStandardError selftest.err
+          Get-Content selftest.out -Encoding utf8 -ErrorAction SilentlyContinue
+          Get-Content selftest.err -Encoding utf8 -ErrorAction SilentlyContinue
+          Write-Host "self-test exit code: $($process.ExitCode)"
+          if ($process.ExitCode -ne 0) { throw "the built application failed its self-test" }
+
+      - name: Install Inno Setup
+        run: choco install -y innosetup
+
+      - name: Build the installer
+        run: python scripts/build_installer.py
+
+      - name: Upload the installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: LocalPDFTranslator-Setup
+          path: dist/installer/*.exe
+          if-no-files-found: error
+
+      # Publishing puts the .exe somewhere a person can download without being
+      # signed in to GitHub. The workflow artifact above cannot do that: it is
+      # a zip, it needs an account, and it is deleted after 90 days.
+      - name: Publish the installer as a release
+        if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.release_tag != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.release_tag || github.ref_name }}
+          files: dist/installer/*.exe
+          fail_on_unmatched_files: true
+          body: |
+            Download the `LocalPDFTranslator-...-Setup.exe` attached below and
+            run it. Windows 10 (build 1507) or later, 64-bit.
+
+            The installer is unsigned, so SmartScreen will say the publisher is
+            unknown — choose **More info > Run anyway**. It installs per-user, so
+            it does not need an administrator.
+
+            It is large because the translation models are inside it. That is the
+            point: once installed the app never touches the network again.

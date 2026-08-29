@@ -1,0 +1,60 @@
+[project]
+name = "local-pdf-translator"
+version = "1.0.0"
+description = "Offline text and PDF translation for Windows 10 and above."
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+
+[project.gui-scripts]
+local-pdf-translator = "local_pdf_translator.ui.app:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 96
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle
+    "F",    # pyflakes
+    "W",    # warnings
+    "I",    # import order
+    "N",    # naming — kept on so the Qt camelCase overrides must be marked
+    "UP",   # pyupgrade
+    "B",    # bugbear
+    "SIM",  # simplify
+    "C4",   # comprehensions
+    "RUF",
+]
+ignore = [
+    # The formatter owns line length; flagging it again only adds noise.
+    "E501",
+    # Several guards here deliberately swallow anything: a damaged PDF, a font
+    # that will not load, a preload that fails. Each one is commented with why.
+    "BLE001",
+    # Mutable class attributes in dataclasses are handled by field(); this rule
+    # fires on the Qt Signal declarations, which are not that.
+    "RUF012",
+    # Exceptions here are named for what happened, not suffixed with "Error":
+    # `raise DocumentIsEncrypted(name)` reads better than `DocumentIsEncryptedError`.
+    "N818",
+    # Em dashes and typographic quotes are used deliberately in user-facing
+    # strings and in comments.
+    "RUF001",
+    "RUF002",
+    "RUF003",
+    # `a + b` on two lists is clearer than unpacking into a literal.
+    "RUF005",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests say what they mean in their names and assertions.
+"tests/*" = ["N806", "S101"]
+# The build scripts import from the package after adjusting sys.path.
+"scripts/*" = ["E402"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["local_pdf_translator"]

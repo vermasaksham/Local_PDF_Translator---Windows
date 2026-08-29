@@ -1,0 +1,25 @@
+# Converted translation models (~300 MB) and the bundled Tesseract. Both are
+# build inputs produced by scripts/, not source.
+/models/
+/tesseract/
+
+# Build output
+/build/
+/dist/
+/packaging/version_info.txt
+*.spec.bak
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+
+# Editors and OS
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
