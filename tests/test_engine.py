@@ -87,7 +87,9 @@ def test_a_paragraph_is_translated_one_sentence_at_a_time(engine):
     english_to_german(engine, ["One thing. Another thing."])
     model = engine.models["opus-mt-en-de"]
     # OPUS-MT degrades badly on whole paragraphs, so it must see sentences.
-    assert model.translated == ["One thing.", "Another thing."]
+    # Sorted, because batches are ordered by length rather than by position —
+    # what matters here is that the paragraph arrived split, not the order.
+    assert sorted(model.translated) == ["Another thing.", "One thing."]
 
 
 # -- pooling and de-duplication --------------------------------------------
@@ -330,3 +332,25 @@ def test_every_sentence_is_translated_exactly_once_when_bucketed():
     assert result == [sentence.upper() for sentence in sentences]
     decoded = [tokens for batch in model.translator.batches for tokens in batch]
     assert len(decoded) == len(sentences)
+
+
+def test_batches_are_filled_with_sentences_of_similar_length(engine):
+    """CTranslate2 pads every sentence in a call out to the longest one, and
+    the call cannot return until the longest output has finished decoding. In
+    document order one stray paragraph among twenty headings makes the whole
+    batch cost its length; sorting first keeps each batch cheap."""
+    short = [f"No {index}." for index in range(TranslationEngine.BATCH_SIZE)]
+    english_to_german(engine, [*short, " ".join(["padding"] * 80) + "."])
+
+    batches = engine.models["opus-mt-en-de"].batches
+    spreads = [max(map(len, batch)) - min(map(len, batch)) for batch in batches]
+    # The long sentence is isolated instead of dragging a batch of headings
+    # up to its own length.
+    assert min(spreads) < 10
+    assert len(batches) == 2
+
+
+def test_reordering_batches_does_not_disturb_the_result(engine):
+    """Sorting is an optimisation and must stay invisible to the caller."""
+    texts = ["Tiny.", " ".join(["long"] * 40) + ".", "Middle sized one here."]
+    assert english_to_german(engine, texts) == [text.upper() for text in texts]

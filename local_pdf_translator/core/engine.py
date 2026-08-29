@@ -137,7 +137,11 @@ class TranslationEngine:
         catalog: ModelCatalog | None = None,
         thread_count: int | None = None,
         cache_capacity: int = 4096,
-        beam_size: int = 4,
+        # Beam search cost scales with the beam. OPUS-MT gains very little
+        # past 2 -- the published BLEU difference between beam 2 and beam 4 is
+        # a fraction of a point -- and 2 halves the decoding work. Pass a
+        # larger value here if a document warrants it.
+        beam_size: int = 2,
     ) -> None:
         self.catalog = catalog or ModelCatalog()
         self.thread_count = thread_count or _default_thread_count()
@@ -261,6 +265,14 @@ class TranslationEngine:
                     # (headers, footers, captions); translate each one once.
                     queued.add(piece.text)
                     pending.append(piece.text)
+
+        # Longest first, so a batch is filled with sentences of similar size.
+        # CTranslate2 pads every sentence in a call out to the longest one and
+        # the call does not return until the longest output has finished
+        # decoding, so one stray paragraph among twenty headings costs the
+        # whole batch its own length. Order is irrelevant to the result:
+        # `translations` is keyed by sentence text, not position.
+        pending.sort(key=len, reverse=True)
 
         for start in range(0, len(pending), self.BATCH_SIZE):
             _raise_if_cancelled(cancel)
