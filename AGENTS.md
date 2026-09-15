@@ -476,6 +476,10 @@ worktree  clean; no stashes; nothing unpushed
 CI        triggers verified firing on `main` and on `codex/**`
 ```
 
+**Stray branch:** `codex/ci-trigger-check` exists only to prove the `codex/**`
+CI glob matches (it did — run #28 built green). It has 0 unique commits and is
+safe to delete; the handoff session lacked permission to delete remote branches.
+
 **Default branch:** see §14. If the GitHub default is still
 `claude/windows-translation-app-1ypiam` when you read this, change it to `main`
 in **Settings ▸ General ▸ Default branch**; it could not be changed
