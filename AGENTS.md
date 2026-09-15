@@ -2,7 +2,8 @@
 
 Orientation for a coding agent picking this project up. Written at the handoff
 from Claude Code to OpenAI Codex on 2026-09-15. Everything here was verified
-against the repository at commit `c27c6b7`, not recalled from a conversation.
+against the repository at commit `74a234c` (the merge of PR #1 into `main`),
+not recalled from a conversation.
 
 If something below disagrees with the code, the code wins — and fix this file.
 
@@ -96,7 +97,8 @@ nothing else — the UI, pipeline and fetch script all read from those lists.
   source. `scripts/build_exe.py` and `scripts/build_installer.py` both read it;
   the installer receives it as `/DAppVersion=`. When bumping a release, update
   `pyproject.toml`'s `version` to match by hand — it is **not** derived, and it
-  had already drifted once (fixed in this handoff commit).
+  had already drifted once (it said 1.0.0 while the package said 1.0.2; fixed in
+  `670a594`).
   `packaging/installer.iss` carries `#define AppVersion "1.0.0"` but it is
   `#ifndef`-guarded and always overridden by the build script; it only applies
   if someone compiles the `.iss` by hand. Leave it alone.
@@ -246,7 +248,10 @@ any pull request; manual dispatch. See §14 — this list matters after the migr
 * **Asset:** `LocalPDFTranslator-1.0.2-Setup.exe`, 386,409,804 bytes (368 MB)
 * **SHA-256:** `b16223379d6d0c9663a7e7f601a17693abf66275dd054ab5a9857a71e472f571`
 * **Previous:** `v1.0.0` (2026-08-19). **There is no `v1.0.1`** — the version
-  went 1.0.0 → 1.0.2 at the user's request. Do not be confused by the gap.
+  went 1.0.0 → 1.0.2 at the owner's request. Do not be confused by the gap.
+* Both tags point at commits that are now reachable from `main` (`v1.0.0` →
+  `2bf9af2`, `v1.0.2` → `c27c6b7`), because PR #1 was merged with a merge
+  commit rather than squashed.
 
 The installer is **not code-signed**, so SmartScreen warns about an unknown
 publisher. Signing requires a purchased certificate; nobody has bought one.
@@ -347,31 +352,29 @@ regression — re-run it.** Roadmap item 2 fixes it properly.
 
 ---
 
-## 11. Unfinished work — exact state
+## 11. Open work — exact state
 
-Nothing is stashed, nothing is uncommitted, nothing is unpushed. The one piece
-of genuinely open work:
+Nothing is stashed, uncommitted or unpushed, in either repository.
 
-| Item | Detail |
+**PR #1 is merged.** It was merged into `main` on 2026-09-15 as `74a234c`, using
+a **merge commit** — deliberately not a squash or rebase, so that the individual
+commit SHAs cited throughout this file still resolve.
+
+| | |
 |---|---|
-| **PR** | [#1 — "Offline text and PDF translator for Windows 10 and above"](https://github.com/vermasaksham/Local_PDF_Translator---Windows/pull/1) |
-| **State** | **OPEN**, not merged, mergeable |
-| **Head** | `c27c6b7` |
-| **Base** | `main` |
-| **Branch** | `claude/windows-translation-app-1ypiam` — 18 commits ahead of `main`, 0 behind |
-| **CI** | Tests and Installer both green on `c27c6b7` (one earlier Installer run on the same commit failed on the Tesseract-download flake described in §10; a later run succeeded and published `v1.0.2`) |
-| **Reviews** | None. No review comments, no requested changes. |
+| **PR** | [#1](https://github.com/vermasaksham/Local_PDF_Translator---Windows/pull/1) — **MERGED** |
+| **Merge commit** | `74a234c` (parents `9e419a2`, `670a594`) |
+| **`main` head** | `74a234c` — tree byte-identical to the pre-merge branch |
+| **Old branch** | `claude/windows-translation-app-1ypiam` — **0 unique commits**, fully contained in `main`. Retained, not deleted; safe to delete whenever the owner wants. |
+| **Reviews** | None were left on the PR. |
 
-**This PR has deliberately not been merged.** It contains the entire project —
-`main` holds only an empty initial commit (`9e419a2`) that exists so the branch
-had something to open a PR against. Merging is a judgement call for the owner,
-not a tidiness exercise. It is safe to merge whenever they want; nothing is
-blocking it.
+There is **no open pull request** and no work in progress. The repository is at a
+clean checkpoint: everything built so far is on `main`, CI is green on `main`,
+and the next agent starts from a blank slate.
 
-Note the repository's **default branch is currently the feature branch**, not
-`main`. If PR #1 is merged, switch the default to `main` and cut subsequent
-releases from there, so tags sit on merged history. `v1.0.0` and `v1.0.2` both
-currently point at commits on the feature branch.
+The one thing that is *unfinished* is not code but **verification** — see §10.
+The v1.0.2 decoder fixes have never been run against real model weights. That is
+roadmap item 1 and it is the first thing to do.
 
 ### Sibling repository
 
@@ -379,8 +382,6 @@ currently point at commits on the feature branch.
 `b11388e` on branches `claude/macos-translation-app-2v7eyp` and
 `claude/windows-translation-app-1ypiam` (both the same commit). No outstanding
 work there. It is a separate implementation, not a dependency.
-
----
 
 ## 12. Read these first
 
@@ -434,9 +435,9 @@ There is no `docs/` directory and no separate ADR log.
   **not** trigger a build on push — though opening a PR still triggers CI via
   the `pull_request:` trigger. If you adopt a different prefix, add it to the
   workflow or your pushes will silently produce no installer.
-* **The historical branch keeps its name.** `claude/windows-translation-app-1ypiam`
-  is the branch PR #1 is built from. Renaming it would close the PR and orphan
-  the release tags. Leave it; start new work on new branches.
+* **Branch from `main`.** PR #1 is merged, so `main` is the trunk and carries
+  the whole project. The old `claude/windows-translation-app-1ypiam` branch has
+  no unique commits and is kept only as a historical pointer; do not build on it.
 * **Commit trailers.** Existing history carries `Co-Authored-By: Claude ...` and
   `Claude-Session:` trailers. These are historical provenance — do not rewrite
   history to remove them, and do not copy them onto new commits.
@@ -463,11 +464,19 @@ There is no `docs/` directory and no separate ADR log.
 ## 15. Repository facts at handoff
 
 ```
-commit    c27c6b7  "Release 1.0.2"   (+ this handoff commit)
-branch    claude/windows-translation-app-1ypiam  ==  origin (in sync)
-main      9e419a2  (empty initial commit only)
-tags      v1.0.0, v1.0.2
+main      74a234c  "Merge pull request #1 ..."  (merge commit, 2 parents)
+          tree identical to pre-merge branch; 65 tracked files
+old branch claude/windows-translation-app-1ypiam @ 670a594
+          0 commits unique to it; fully contained in main
+tags      v1.0.0 -> 2bf9af2, v1.0.2 -> c27c6b7  (both reachable from main)
+open PRs  none
 tests     194 passed
 lint      ruff check + ruff format --check clean
 worktree  clean; no stashes; nothing unpushed
+CI        triggers verified firing on `main` and on `codex/**`
 ```
+
+**Default branch:** see §14. If the GitHub default is still
+`claude/windows-translation-app-1ypiam` when you read this, change it to `main`
+in **Settings ▸ General ▸ Default branch**; it could not be changed
+programmatically at handoff time.
