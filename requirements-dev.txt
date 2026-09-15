@@ -1,0 +1,8 @@
+-r requirements.txt
+
+# Only scripts/make_icon.py needs Pillow; the app itself shapes and rasterises
+# text with Qt, so it is not a runtime dependency.
+Pillow>=10.2
+pytest>=8.0
+pyinstaller>=6.3
+ruff>=0.4
