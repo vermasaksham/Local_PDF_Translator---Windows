@@ -1,6 +1,6 @@
 [project]
 name = "local-pdf-translator"
-version = "1.0.0"
+version = "1.0.2"
 description = "Offline text and PDF translation for Windows 10 and above."
 requires-python = ">=3.11"
 license = { file = "LICENSE" }

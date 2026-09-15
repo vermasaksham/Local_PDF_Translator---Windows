@@ -12,8 +12,10 @@ name: Build Windows installer
 on:
   push:
     # Feature branches included deliberately: this is how the installer gets
-    # built at all, so it has to run before anything reaches main.
-    branches: [main, "claude/**"]
+    # built at all, so it has to run before anything reaches main. A branch
+    # outside these globs still gets CI when a pull request is opened, but a
+    # plain push to it builds nothing.
+    branches: [main, "claude/**", "codex/**"]
     tags: ["v*"]
   pull_request:
   workflow_dispatch:

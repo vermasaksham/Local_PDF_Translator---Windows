@@ -171,7 +171,7 @@ CI workflow runs it on every build.
 python -m pytest
 ```
 
-186 tests, no models required — the engine is stubbed out. The tests that need
+194 tests, no models required — the engine is stubbed out. The tests that need
 Tesseract skip themselves when it is absent.
 
 ---
